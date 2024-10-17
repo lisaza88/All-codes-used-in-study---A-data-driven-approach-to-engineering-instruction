@@ -1,0 +1,74 @@
+import pandas as pd
+from sklearn.model_selection import cross_val_score, StratifiedKFold, RandomizedSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.pipeline import Pipeline
+import matplotlib.pyplot as plt
+
+df = pd.read_excel(r'D:\USER\Downloads\Study Quality Survey Results.xlsx')
+
+feature_names = ['StudyDuration', 'ConsistencyofStudySessions', 'ReviewandRepetition',
+                 'PreparationforClass', 'ReviewAfterClass', 'EffectiveStudyEnvironment',
+                 'PaceofStudying', 'EngagementwithClassResources', 'ReadingBeyondCourseMaterials']
+X = df[feature_names]
+y = df['FinalScore']
+
+rf_model = RandomForestRegressor(random_state=42)
+
+pipeline = Pipeline([
+    ('scaler', StandardScaler()),
+    ('regressor', rf_model)
+])
+
+param_distributions = {
+    'regressor__n_estimators': [100, 200, 300],
+    'regressor__max_depth': [None, 10, 20],
+    'regressor__min_samples_split': [2, 5, 10],
+    'regressor__min_samples_leaf': [1, 2, 4]
+}
+
+random_search = RandomizedSearchCV(pipeline, param_distributions, cv=5, scoring='r2', n_iter=10, random_state=42)
+random_search.fit(X, y)
+
+best_params = random_search.best_params_
+print(f"Best parameters from RandomizedSearchCV: {best_params}")
+
+pipeline.set_params(**random_search.best_params_)
+pipeline.fit(X, y)
+
+stratified_kfold = StratifiedKFold(n_splits=5)
+
+cv_scores = cross_val_score(pipeline, X, y, cv=stratified_kfold, scoring='r2')
+
+y_pred = pipeline.predict(X)
+
+mse = mean_squared_error(y, y_pred)
+rmse = mean_squared_error(y, y_pred, squared=False)
+mae = mean_absolute_error(y, y_pred)
+r2 = r2_score(y, y_pred)
+
+print(f"Mean Squared Error (MSE): {mse}")
+print(f"Root Mean Squared Error (RMSE): {rmse}")
+print(f"Mean Absolute Error (MAE): {mae}")
+print(f"R-squared: {r2}")
+
+print("Cross-validation scores:", cv_scores)
+print("Mean R-squared (CV):", cv_scores.mean())
+print("Standard Deviation of R-squared (CV):", cv_scores.std())
+
+fitted_rf_model = random_search.best_estimator_.named_steps['regressor']
+feature_importances = fitted_rf_model.feature_importances_
+
+print("\nFeature Importances:")
+importance_dict = dict(zip(feature_names, feature_importances))
+sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+for feature, importance in sorted_importance:
+    print(f"{feature}: {importance}")
+
+plt.barh(feature_names, feature_importances)
+plt.title("Feature Importance in Random Forest")
+plt.xlabel("Importance")
+plt.show()
+
+input("Press Enter to close the program...")
